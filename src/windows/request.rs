@@ -210,15 +210,26 @@ fn write_icon_data_to_memory(mem: &mut [u8], h_bitmap: HBITMAP, bmp: &BITMAP, bi
         let mut pos = 0;
         for i in (0..bmp.bmHeight).rev() {
             // Write the bitmap scanline
-            
-            ptr::copy_nonoverlapping(icon_data[(i * bmp.bmWidthBytes) as usize..].as_ptr(), mem[pos..].as_mut_ptr(), bmp.bmWidthBytes as usize); // 1 line of BYTES
+            let src_ptr = icon_data[(i * bmp.bmWidthBytes) as usize..].as_ptr();
+            let dst_ptr = mem[pos..].as_mut_ptr();
+            assert!(!src_ptr.is_null() && !dst_ptr.is_null(), "Pointers must be non-null");
+            assert!(src_ptr.align_offset(mem::align_of::<u8>()) == 0, "Source pointer must be aligned");
+            assert!(dst_ptr.align_offset(mem::align_of::<u8>()) == 0, "Destination pointer must be aligned");
+            assert!(src_ptr.add(bmp.bmWidthBytes as usize) <= dst_ptr as *const u8 || (dst_ptr as *const u8).add(bmp.bmWidthBytes as usize) <= src_ptr, "Memory ranges must not overlap");
+                    
+            ptr::copy_nonoverlapping(src_ptr, dst_ptr, bmp.bmWidthBytes as usize); // 1 line of BYTES
             pos += bmp.bmWidthBytes as usize;
-
+                    
             // extend to a 32bit boundary (in the file) if necessary
             if bmp.bmWidthBytes & 3 != 0 {
                 let padding: [u8; 4] = [0; 4];
-                ptr::copy_nonoverlapping(padding.as_ptr(), mem[pos..].as_mut_ptr(), (4 - bmp.bmWidthBytes) as usize); 
-                pos += 4 - bmp.bmWidthBytes as usize;
+                let padding_size = 4 - (bmp.bmWidthBytes & 3);
+                let dst_ptr = mem[pos..].as_mut_ptr();
+                assert!(!dst_ptr.is_null(), "Pointer must be non-null");
+                assert!(dst_ptr.align_offset(mem::align_of::<u8>()) == 0, "Pointer must be aligned");
+            
+                ptr::copy_nonoverlapping(padding.as_ptr(), dst_ptr, padding_size as usize);
+                pos += padding_size as usize;
             }
         }
     }
